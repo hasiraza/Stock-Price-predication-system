@@ -309,7 +309,7 @@ if predict_button and stock_symbol:
             ax2.tick_params(colors='white')
             plt.tight_layout()
             st.pyplot(fig2)
-            
+            #m
             # CHART 3: Prediction vs Original (Black Background)
             st.subheader("🔮 Prediction vs Original Results")
             fig3, ax3 = plt.subplots(figsize=(12, 6))
