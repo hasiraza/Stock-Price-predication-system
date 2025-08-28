@@ -1,9 +1,8 @@
-streamlit
-numpy
-pandas
-matplotlib
-sklearn
-base64
+Python 3.7+
+Streamlit
+TensorFlow/Keras
 yfinance
-io
-keras
+scikit-learn
+pandas
+numpy
+matplotlib
