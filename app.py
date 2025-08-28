@@ -146,13 +146,10 @@ if predict_button and stock_symbol:
             end = dt.datetime(2024, 10, 1)
             
             # Download stock data with fallback
-            try:
-                df = yf.download(stock_symbol, start=start, end=end)
-                if df.empty and stock_symbol == "META":
-                    df = yf.download("FB", start=start, end=end)
-            except Exception as e:
-                st.error(f"❌ Failed to fetch {stock_symbol}: {e}")
-                st.stop()
+            df = yf.download(stock_symbol, start=start, end=end)
+            if df.empty and stock_symbol == "META":
+              df = yf.download("FB", start=start, end=end)
+
             
             if df.empty:
                 st.error("❌ No data found for the entered stock symbol.")
