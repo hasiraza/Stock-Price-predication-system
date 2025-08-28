@@ -1,8 +1,7 @@
-Python 3.7+
-Streamlit
-TensorFlow/Keras
-yfinance
-scikit-learn
-pandas
+streamlit
 numpy
+pandas
 matplotlib
+scikit-learn
+tensorflow
+yfinance
