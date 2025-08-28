@@ -8,6 +8,8 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from io import BytesIO
 import base64
+import warnings
+warnings.filterwarnings('ignore')
 
 # Set page config
 st.set_page_config(
@@ -23,7 +25,6 @@ def get_base64_of_bin_file(bin_file):
             data = f.read()
         return base64.b64encode(data).decode()
     except (FileNotFoundError, Exception) as e:
-        print(f"Background image not found: {e}")
         return None
 
 def set_background(png_file):
@@ -115,30 +116,83 @@ def set_background(png_file):
 # Apply background (with better error handling)
 try:
     set_background('background.jpg')
-except Exception as e:
-    print(f"Warning: Could not set background image: {e}")
-    # Continue without background image
+except Exception:
+    pass  # Continue without background image
+
+# Function to download stock data with retries and better error handling
+@st.cache_data(ttl=3600)  # Cache data for 1 hour
+def download_stock_data(symbol, start_date, end_date, max_retries=3):
+    """Download stock data with retry mechanism and better error handling"""
+    for attempt in range(max_retries):
+        try:
+            # Configure yfinance session with user agent
+            import requests
+            session = requests.Session()
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            })
+            
+            # Download data with additional parameters
+            ticker = yf.Ticker(symbol, session=session)
+            df = ticker.history(
+                start=start_date, 
+                end=end_date,
+                auto_adjust=True,
+                prepost=True,
+                threads=True,
+                proxy=None
+            )
+            
+            if not df.empty:
+                # Ensure we have the required columns
+                required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+                missing_columns = [col for col in required_columns if col not in df.columns]
+                if missing_columns:
+                    st.warning(f"Missing columns: {missing_columns}")
+                    continue
+                
+                return df
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                st.warning(f"Attempt {attempt + 1} failed for {symbol}, retrying...")
+                continue
+            else:
+                st.error(f"Failed to download data for {symbol} after {max_retries} attempts: {str(e)}")
+                return None
+    
+    return None
 
 # Stock symbols dictionary with popular stocks
 STOCK_OPTIONS = {
-    # US Stocks
+    # US Stocks - Major tech companies
     "Apple Inc. (AAPL)": "AAPL",
-    "Microsoft Corp. (MSFT)": "MSFT",
+    "Microsoft Corp. (MSFT)": "MSFT", 
     "Amazon.com Inc. (AMZN)": "AMZN",
     "Alphabet Inc. (GOOGL)": "GOOGL",
     "Tesla Inc. (TSLA)": "TSLA",
     "Meta Platforms (META)": "META",
     "NVIDIA Corp. (NVDA)": "NVDA",
+    "Netflix Inc. (NFLX)": "NFLX",
+    "Adobe Inc. (ADBE)": "ADBE",
+    
+    # Financial stocks
     "JPMorgan Chase (JPM)": "JPM",
-    "Johnson & Johnson (JNJ)": "JNJ",
+    "Bank of America (BAC)": "BAC",
+    "Wells Fargo (WFC)": "WFC",
+    "Goldman Sachs (GS)": "GS",
     "Visa Inc. (V)": "V",
-    "Walmart Inc. (WMT)": "WMT",
-    "Procter & Gamble (PG)": "PG",
-    "UnitedHealth Group (UNH)": "UNH",
-    "Home Depot (HD)": "HD",
     "Mastercard Inc. (MA)": "MA",
     
-    # Indian Stocks
+    # Consumer goods
+    "Johnson & Johnson (JNJ)": "JNJ",
+    "Procter & Gamble (PG)": "PG",
+    "Coca-Cola (KO)": "KO",
+    "PepsiCo (PEP)": "PEP",
+    "Walmart Inc. (WMT)": "WMT",
+    "Home Depot (HD)": "HD",
+    
+    # Indian Stocks (NSE)
     "Reliance Industries (RELIANCE.NS)": "RELIANCE.NS",
     "Tata Consultancy Services (TCS.NS)": "TCS.NS",
     "HDFC Bank (HDFCBANK.NS)": "HDFCBANK.NS",
@@ -148,19 +202,11 @@ STOCK_OPTIONS = {
     "Bharti Airtel (BHARTIARTL.NS)": "BHARTIARTL.NS",
     "ITC Ltd (ITC.NS)": "ITC.NS",
     "Hindustan Unilever (HINDUNILVR.NS)": "HINDUNILVR.NS",
-    "Power Grid Corp (POWERGRID.NS)": "POWERGRID.NS",
     "Wipro (WIPRO.NS)": "WIPRO.NS",
-    "Tech Mahindra (TECHM.NS)": "TECHM.NS",
-    "Asian Paints (ASIANPAINT.NS)": "ASIANPAINT.NS",
-    "Maruti Suzuki (MARUTI.NS)": "MARUTI.NS",
-    "Bajaj Finance (BAJFINANCE.NS)": "BAJFINANCE.NS",
     
-    # Additional Popular Stocks
-    "Netflix Inc. (NFLX)": "NFLX",
-    "Adobe Inc. (ADBE)": "ADBE",
-    "Salesforce Inc. (CRM)": "CRM",
-    "Intel Corp. (INTC)": "INTC",
-    "Cisco Systems (CSCO)": "CSCO"
+    # ETFs as backup options
+    "SPDR S&P 500 ETF (SPY)": "SPY",
+    "Invesco QQQ Trust (QQQ)": "QQQ",
 }
 
 # Main header
@@ -185,15 +231,30 @@ st.sidebar.markdown(
     """
 )
 
+# Add troubleshooting info
+st.sidebar.subheader("⚠️ Troubleshooting")
+st.sidebar.markdown(
+    """
+    If you encounter data download issues:
+    - Try a different stock symbol
+    - ETF symbols (SPY, QQQ) are usually more reliable
+    - Check if the market is open
+    - Some symbols may be temporarily unavailable
+    """
+)
+
 # Stock selection with dropdown
 st.subheader("Select a Stock")
 stock_selection = st.selectbox(
     "Select Stock Symbol:",
     options=list(STOCK_OPTIONS.keys()),
-    index=list(STOCK_OPTIONS.values()).index("POWERGRID.NS") if "POWERGRID.NS" in STOCK_OPTIONS.values() else 0,
+    index=0,  # Default to first option (Apple)
     help="Select from the list of available stocks"
 )
 stock_symbol = STOCK_OPTIONS[stock_selection]
+
+# Display selected symbol
+st.info(f"Selected Symbol: **{stock_symbol}**")
 
 # Prediction button placed below the dropdown
 predict_button = st.button("🔮 Predict Stock Price")
@@ -205,51 +266,97 @@ if predict_button and stock_symbol:
             # Load the model
             try:
                 model = load_model('stock_by_model.h5')
-            except:
+            except Exception as e:
                 st.error("❌ Model file 'stock_by_model.h5' not found. Please ensure the model file is in your project directory.")
+                st.error(f"Error details: {str(e)}")
                 st.stop()
             
-            # Define date range
-            start = dt.datetime(2000, 1, 1)
-            end = dt.datetime(2024, 10, 1)
+            # Define date range - more recent data
+            start = dt.datetime(2015, 1, 1)  # Start from 2015 instead of 2000
+            end = dt.datetime.now()  # Use current date instead of fixed date
             
-            # Download stock data
-            df = yf.download(stock_symbol, start=start, end=end)
+            # Download stock data with improved error handling
+            df = download_stock_data(stock_symbol, start, end)
             
-            if df.empty:
-                st.error("❌ No data found for the entered stock symbol. Please check the symbol and try again.")
+            if df is None or df.empty:
+                st.error(f"❌ No data found for {stock_symbol}. This might be due to:")
+                st.error("- Network connectivity issues")
+                st.error("- Symbol delisting or suspension")
+                st.error("- yfinance API limitations")
+                st.error("- Market closure or data provider issues")
+                
+                # Suggest alternatives
+                st.info("💡 **Try these alternatives:**")
+                st.info("- Select a different stock (ETFs like SPY, QQQ are usually reliable)")
+                st.info("- Wait a few minutes and try again")
+                st.info("- Check if the stock symbol is correct")
                 st.stop()
+            
+            # Validate data quality
+            if len(df) < 200:
+                st.warning(f"⚠️ Limited data available ({len(df)} days). Predictions may be less accurate.")
             
             # Display basic info
             st.success(f"✅ Successfully loaded data for {stock_symbol}")
-            st.info(f"📊 Data range: {df.index[0].strftime('%Y-%m-%d')} to {df.index[-1].strftime('%Y-%m-%d')}")
+            st.info(f"📊 Data range: {df.index[0].strftime('%Y-%m-%d')} to {df.index[-1].strftime('%Y-%m-%d')} ({len(df)} trading days)")
             
-            # Calculate EMAs
-            ema20 = df.Close.ewm(span=20, adjust=False).mean()
-            ema50 = df.Close.ewm(span=50, adjust=False).mean()
-            ema100 = df.Close.ewm(span=100, adjust=False).mean()
-            ema200 = df.Close.ewm(span=200, adjust=False).mean()
+            # Calculate EMAs with proper error handling
+            try:
+                ema20 = df.Close.ewm(span=20, adjust=False).mean()
+                ema50 = df.Close.ewm(span=50, adjust=False).mean()
+                ema100 = df.Close.ewm(span=100, adjust=False).mean()
+                ema200 = df.Close.ewm(span=200, adjust=False).mean()
+            except Exception as e:
+                st.error(f"Error calculating EMAs: {str(e)}")
+                st.stop()
             
             # Data preparation for prediction
+            if len(df) < 100:
+                st.error("❌ Insufficient data for prediction. Need at least 100 data points.")
+                st.stop()
+                
             data_training = pd.DataFrame(df['Close'][0:int(len(df)*0.70)])
             data_testing = pd.DataFrame(df['Close'][int(len(df)*0.70): int(len(df))])
             
+            if len(data_training) < 100:
+                st.error("❌ Insufficient training data. Need at least 100 data points for training.")
+                st.stop()
+            
             scaler = MinMaxScaler(feature_range=(0, 1))
-            data_training_array = scaler.fit_transform(data_training)
+            
+            try:
+                data_training_array = scaler.fit_transform(data_training)
+            except Exception as e:
+                st.error(f"Error in data preprocessing: {str(e)}")
+                st.stop()
             
             # Prepare data for prediction
             past_100_days = data_training.tail(100)
             final_df = pd.concat([past_100_days, data_testing], ignore_index=True)
-            input_data = scaler.fit_transform(final_df)
+            
+            try:
+                input_data = scaler.transform(final_df)
+            except Exception as e:
+                st.error(f"Error in data transformation: {str(e)}")
+                st.stop()
             
             x_test, y_test = [], []
             for i in range(100, input_data.shape[0]):
                 x_test.append(input_data[i - 100:i])
                 y_test.append(input_data[i, 0])
+            
+            if len(x_test) == 0:
+                st.error("❌ Not enough data for prediction after preprocessing.")
+                st.stop()
+                
             x_test, y_test = np.array(x_test), np.array(y_test)
 
             # Make predictions
-            y_predicted = model.predict(x_test)
+            try:
+                y_predicted = model.predict(x_test)
+            except Exception as e:
+                st.error(f"Error during prediction: {str(e)}")
+                st.stop()
             
             # Inverse scaling
             scaler_scale = scaler.scale_
@@ -258,7 +365,6 @@ if predict_button and stock_symbol:
             y_test = y_test * scale_factor
             
             # Fix for performance metrics
-            # Flatten the y_predicted array correctly
             y_predicted_flat = y_predicted.flatten()
             
             # Ensure both arrays have the same length
@@ -339,6 +445,19 @@ if predict_button and stock_symbol:
                 latest_prediction = y_predicted_truncated[-1] if len(y_predicted_truncated) > 0 else 0
                 st.metric("Last Prediction", f"${latest_prediction:.2f}")
             
+            # Additional insights
+            st.subheader("📊 Market Insights")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                price_change = df.Close.iloc[-1] - df.Close.iloc[-2] if len(df) > 1 else 0
+                st.metric("Daily Change", f"${price_change:.2f}", f"{price_change:.2f}")
+            with col2:
+                volatility = df.Close.pct_change().std() * np.sqrt(252) * 100
+                st.metric("Volatility (Annual)", f"{volatility:.2f}%")
+            with col3:
+                volume_avg = df.Volume.tail(20).mean() if 'Volume' in df.columns else 0
+                st.metric("Avg Volume (20d)", f"{volume_avg:,.0f}")
+            
             # Descriptive statistics
             with st.expander("📈 Stock Data Statistics"):
                 st.dataframe(df.describe(), use_container_width=True)
@@ -369,16 +488,15 @@ if predict_button and stock_symbol:
             plt.close('all')
             
     except Exception as e:
-        pass
-        # st.error(f"❌ An error occurred: {str(e)}")
-        # st.error("Please check your stock symbol and ensure all required files are present.")
+        st.error(f"❌ An unexpected error occurred: {str(e)}")
+        st.error("Please try again with a different stock symbol or check your internet connection.")
 
 # Contact info in sidebar
 st.sidebar.subheader("📞 Contact us")
 st.sidebar.markdown(
     """
     **Email:** hasiraza511@gmail.com  
-    **Linkedin:** https://www.linkedin.com/in/muhammad-haseeb-raza-71987a366/  
+    **LinkedIn:** https://www.linkedin.com/in/muhammad-haseeb-raza-71987a366/  
     **GitHub:** https://github.com/hasiraza
     """
 )
