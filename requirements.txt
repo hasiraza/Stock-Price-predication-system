@@ -1,0 +1,9 @@
+streamlit
+numpy
+pandas
+matplotlib
+sklearn
+base64
+yfinance
+io
+keras
