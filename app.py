@@ -16,14 +16,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Fix for yfinance issue - set a supported user agent
-import requests
-import yfinance as yf
-from yfinance import shared
-
-# Override the user agent to fix the impersonation error
-shared._USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
 # Background functions
 def get_base64_of_bin_file(bin_file):
     try:
@@ -64,7 +56,7 @@ def set_background(png_file):
             background-color: rgba(255, 87, 51, 0.8);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 2px;
             backdrop-filter: blur(5px);
         }}
         
@@ -110,7 +102,7 @@ def set_background(png_file):
             background-color: rgba(255, 87, 51, 0.8);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 10px;
             backdrop-filter: blur(5px);
         }
         
@@ -122,7 +114,7 @@ def set_background(png_file):
 
 # Apply background (with better error handling)
 try:
-    set_background('background.png')
+    set_background('background.jpg')
 except Exception as e:
     print(f"Warning: Could not set background image: {e}")
     # Continue without background image
@@ -172,7 +164,7 @@ STOCK_OPTIONS = {
 }
 
 # Main header
-st.header("📈 Stock Price Prediction System")
+st.header("Stock Price Prediction System")
 
 # Sidebar info
 st.sidebar.header("Stock Price Prediction")
@@ -204,7 +196,7 @@ stock_selection = st.selectbox(
 stock_symbol = STOCK_OPTIONS[stock_selection]
 
 # Prediction button placed below the dropdown
-predict_button = st.button("🔮 Predict Stock Price", type="primary", use_container_width=True)
+predict_button = st.button("🔮 Predict Stock Price")
 
 # Prediction logic - Charts displayed directly when button is clicked
 if predict_button and stock_symbol:
@@ -221,19 +213,8 @@ if predict_button and stock_symbol:
             start = dt.datetime(2000, 1, 1)
             end = dt.datetime(2024, 10, 1)
             
-            # Download stock data with error handling
-            try:
-                df = yf.download(stock_symbol, start=start, end=end, progress=False)
-            except Exception as e:
-                st.error(f"❌ Error downloading data for {stock_symbol}: {str(e)}")
-                st.info("Trying alternative download method...")
-                try:
-                    # Alternative method using Ticker
-                    ticker = yf.Ticker(stock_symbol)
-                    df = ticker.history(start=start, end=end)
-                except Exception as e2:
-                    st.error(f"❌ Failed to download data: {str(e2)}")
-                    st.stop()
+            # Download stock data
+            df = yf.download(stock_symbol, start=start, end=end)
             
             if df.empty:
                 st.error("❌ No data found for the entered stock symbol. Please check the symbol and try again.")
@@ -388,8 +369,9 @@ if predict_button and stock_symbol:
             plt.close('all')
             
     except Exception as e:
-        st.error(f"❌ An error occurred: {str(e)}")
-        st.error("Please check your stock symbol and ensure all required files are present.")
+        pass
+        # st.error(f"❌ An error occurred: {str(e)}")
+        # st.error("Please check your stock symbol and ensure all required files are present.")
 
 # Contact info in sidebar
 st.sidebar.subheader("📞 Contact us")
